@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ title or "WB Recruitment" }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+
+</head>
+<body>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div style="max-width:400px;margin:20px auto;">
+      {% for category, message in messages %}
+        <div style="
+            padding:10px;
+            margin-bottom:10px;
+            border-radius:5px;
+            color:white;
+            background:
+              {% if category=='success' %}#16a34a
+              {% else %}#dc2626{% endif %};
+        ">
+          {{ message }}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<header>
+    <img src="{{ url_for('static', filename='wb_logo.png') }}" class="logo">
+    <h1>Government of West Bengal</h1>
+    <p>State Recruitment Portal</p>
+</header>
+
+<nav>
+    <a href="/">Home</a>
+    <a href="/notices">Notices</a>
+    <a href="/login">Admin</a>
+</nav>
+
+<div class="wave"></div>
+
+{% block content %}{% endblock %}
+
+<div class="footer">
+    © 2026 Government of West Bengal
+</div>
+
+</body>
+</html>

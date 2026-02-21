@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="hero">
+    <h2>Latest Recruitment Notices</h2>
+</div>
+
+<div class="grid">
+    {% for notice in notices %}
+    <div class="card notice-card">
+        <div class="notice-header">
+            <div class="pdf-icon">📄</div>
+            <h3>{{ notice.title }}</h3>
+        </div>
+
+        <p class="notice-date">
+            Uploaded on: {{ notice.upload_date.strftime('%d %b %Y') }}
+        </p>
+
+        <a href="{{ url_for('static', filename='uploads/' + notice.filename) }}" 
+           class="btn download-btn" 
+           target="_blank">
+           Download PDF
+        </a>
+    </div>
+    {% endfor %}
+</div>
+
+{% endblock %}

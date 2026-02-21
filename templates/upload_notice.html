@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="login-box">
+    <h2>Upload Notice</h2>
+
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".pdf" required>
+        <button class="btn" type="submit">Upload</button>
+    </form>
+
+</div>
+
+{% endblock %}
+
