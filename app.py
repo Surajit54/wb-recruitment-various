@@ -25,7 +25,7 @@ from psycopg2.extras import RealDictCursor
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-set DATABASE_URL=postgresql://postgres:your_password@localhost:5432/your_db_name
+
 
 
 
@@ -116,4 +116,5 @@ def notices():
 # =========================
 if __name__ == "__main__":
     app.run(debug=False)
+
 
