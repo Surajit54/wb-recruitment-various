@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, abort
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from werkzeug.utils import secure_filename
-import os
+from werkzeug.security import generate_password_hash, check_password_hash
+import os, uuid
 
 # =========================
 # APP CONFIG
@@ -13,139 +14,130 @@ app.secret_key = os.environ.get("SECRET_KEY", "fallback-secret")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
 ALLOWED_EXTENSIONS = {"pdf"}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
 
 # =========================
-# DATABASE CONFIG
+# DATABASE
 # =========================
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-def get_db_connection():
-    if not DATABASE_URL:
-        return None
+def get_db():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
 # =========================
-# HELPER
+# HELPERS
 # =========================
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def login_required():
+    if "admin_id" not in session:
+        abort(403)
 
 # =========================
 # ROUTES
 # =========================
 @app.route("/")
 def index():
-    try:
-        return render_template("index.html")
-    except Exception as e:
-        return f"Template error: {e}"
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM notices ORDER BY upload_date DESC")
+    notices = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template("index.html", notices=notices)
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM admins WHERE username=%s", (username,))
+        admin = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if admin and check_password_hash(admin["password"], password):
+            session["admin_id"] = admin["id"]
+            return redirect(url_for("dashboard"))
+
+        return render_template("login.html", error="Invalid login")
+
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+@app.route("/admin/dashboard")
+def dashboard():
+    login_required()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) AS total FROM notices")
+    total = cur.fetchone()["total"]
+    cur.close()
+    conn.close()
+    return render_template("admin_dashboard.html", total=total)
+
+@app.route("/admin/upload", methods=["GET", "POST"])
+def upload():
+    login_required()
+
+    if request.method == "POST":
+        title = request.form["title"]
+        file = request.files["file"]
+
+        if not title or not file or not allowed_file(file.filename):
+            return render_template("upload.html", error="Invalid file")
+
+        filename = f"{uuid.uuid4().hex}.pdf"
+        file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO notices (title, filename) VALUES (%s, %s)",
+            (title, filename)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return redirect(url_for("dashboard"))
+
+    return render_template("upload.html")
+
+@app.route("/admin/delete/<int:id>")
+def delete_notice(id):
+    login_required()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT filename FROM notices WHERE id=%s", (id,))
+    row = cur.fetchone()
+
+    if row:
+        filepath = os.path.join(app.config["UPLOAD_FOLDER"], row["filename"])
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        cur.execute("DELETE FROM notices WHERE id=%s", (id,))
+        conn.commit()
+
+    cur.close()
+    conn.close()
+    return redirect(url_for("dashboard"))
 
 @app.route("/health")
 def health():
     return "OK"
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    try:
-        if request.method == "POST":
-            username = request.form.get("username")
-            password = request.form.get("password")
-
-            if username == "admin" and password == "1234":
-                session["admin"] = True
-                return redirect(url_for("admin_dashboard"))
-            else:
-                return render_template("login.html", error="Invalid credentials")
-
-        return render_template("login.html")
-    except Exception as e:
-        return f"Login error: {e}"
-
-@app.route("/logout")
-def logout():
-    session.pop("admin", None)
-    return redirect(url_for("login"))
-
-@app.route("/admin/dashboard")
-def admin_dashboard():
-    if "admin" not in session:
-        return redirect(url_for("login"))
-
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return "DATABASE_URL not set"
-
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) AS total FROM notices")
-        total = cur.fetchone()["total"]
-
-        cur.close()
-        conn.close()
-
-        return render_template("admin_dashboard.html", total=total)
-
-    except Exception as e:
-        return f"Dashboard error: {e}"
-
-@app.route("/admin/upload", methods=["GET", "POST"])
-def upload_notice():
-    if "admin" not in session:
-        return redirect(url_for("login"))
-
-    try:
-        if request.method == "POST":
-            title = request.form.get("title")
-            file = request.files.get("file")
-
-            if not title or not file or file.filename == "":
-                return render_template("upload_notice.html", error="All fields required")
-
-            if allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                file.save(os.path.join(UPLOAD_FOLDER, filename))
-
-                conn = get_db_connection()
-                if not conn:
-                    return "DATABASE_URL not set"
-
-                cur = conn.cursor()
-                cur.execute(
-                    "INSERT INTO notices (title, filename) VALUES (%s, %s)",
-                    (title, filename)
-                )
-                conn.commit()
-
-                cur.close()
-                conn.close()
-
-                return redirect(url_for("notices"))
-
-        return render_template("upload_notice.html")
-
-    except Exception as e:
-        return f"Upload error: {e}"
-
-@app.route("/notices")
-def notices():
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return "DATABASE_URL not set"
-
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM notices ORDER BY upload_date DESC")
-        notices = cur.fetchall()
-
-        cur.close()
-        conn.close()
-
-        return render_template("notices.html", notices=notices)
-
-    except Exception as e:
-        return f"Notices error: {e}"
 
 # =========================
 # RUN
