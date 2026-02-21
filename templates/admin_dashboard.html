@@ -1,19 +1,4 @@
-{% extends "base.html" %}
-{% block content %}
-
-<div class="admin-container">
-
-    <div class="sidebar">
-        <a href="/admin/upload">Upload Notice</a>
-        <a href="/notices">View Notices</a>
-        <a href="/logout">Logout</a>
-    </div>
-
-    <div class="main-content">
-        <h2>Admin Dashboard</h2>
-        <p>Welcome Admin</p>
-    </div>
-
-</div>
-
-{% endblock %}
+<h2>Admin Dashboard</h2>
+<p>Total Notices: {{ total }}</p>
+<a href="/admin/upload">Upload Notice</a> |
+<a href="/logout">Logout</a>
