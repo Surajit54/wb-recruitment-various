@@ -17,18 +17,12 @@ ALLOWED_EXTENSIONS = {"pdf"}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # =========================
-# DATABASE CONNECTION
+# DATABASE CONFIG
 # =========================
-import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
-
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-
-
-
-
+def get_db_connection():
+    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
 # =========================
 # HELPER
@@ -39,7 +33,6 @@ def allowed_file(filename):
 # =========================
 # ROUTES
 # =========================
-
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -71,8 +64,14 @@ def admin_dashboard():
     if "admin" not in session:
         return redirect(url_for("login"))
 
+    conn = get_db_connection()
+    cur = conn.cursor()
+
     cur.execute("SELECT COUNT(*) AS total FROM notices")
     total = cur.fetchone()["total"]
+
+    cur.close()
+    conn.close()
 
     return render_template("admin_dashboard.html", total=total)
 
@@ -93,11 +92,17 @@ def upload_notice():
             filename = secure_filename(file.filename)
             file.save(os.path.join(UPLOAD_FOLDER, filename))
 
+            conn = get_db_connection()
+            cur = conn.cursor()
+
             cur.execute(
                 "INSERT INTO notices (title, filename) VALUES (%s, %s)",
                 (title, filename)
             )
             conn.commit()
+
+            cur.close()
+            conn.close()
 
             return redirect(url_for("notices"))
 
@@ -106,8 +111,15 @@ def upload_notice():
 
 @app.route("/notices")
 def notices():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
     cur.execute("SELECT * FROM notices ORDER BY upload_date DESC")
     notices = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
     return render_template("notices.html", notices=notices)
 
 
@@ -115,6 +127,4 @@ def notices():
 # RUN
 # =========================
 if __name__ == "__main__":
-    app.run(debug=False)
-
-
+    app.run(host="0.0.0.0", port=5000)
