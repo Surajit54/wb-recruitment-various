@@ -29,6 +29,42 @@ def get_db():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
 # =========================
+# AUTO INIT DB (NO MANUAL SQL)
+# =========================
+def init_db():
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS admins (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE,
+        password TEXT
+    );
+    """)
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS notices (
+        id SERIAL PRIMARY KEY,
+        title TEXT,
+        filename TEXT,
+        upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    # default admin (admin / 1234) — created once
+    cur.execute("SELECT * FROM admins WHERE username='admin'")
+    if not cur.fetchone():
+        cur.execute(
+            "INSERT INTO admins (username, password) VALUES (%s, %s)",
+            ("admin", generate_password_hash("1234"))
+        )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# =========================
 # HELPERS
 # =========================
 def allowed_file(filename):
@@ -54,8 +90,8 @@ def index():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
+        username = request.form.get("username")
+        password = request.form.get("password")
 
         conn = get_db()
         cur = conn.cursor()
@@ -93,8 +129,8 @@ def upload():
     login_required()
 
     if request.method == "POST":
-        title = request.form["title"]
-        file = request.files["file"]
+        title = request.form.get("title")
+        file = request.files.get("file")
 
         if not title or not file or not allowed_file(file.filename):
             return render_template("upload.html", error="Invalid file")
@@ -125,9 +161,9 @@ def delete_notice(id):
     row = cur.fetchone()
 
     if row:
-        filepath = os.path.join(app.config["UPLOAD_FOLDER"], row["filename"])
-        if os.path.exists(filepath):
-            os.remove(filepath)
+        path = os.path.join(app.config["UPLOAD_FOLDER"], row["filename"])
+        if os.path.exists(path):
+            os.remove(path)
         cur.execute("DELETE FROM notices WHERE id=%s", (id,))
         conn.commit()
 
@@ -140,7 +176,9 @@ def health():
     return "OK"
 
 # =========================
-# RUN
+# STARTUP
 # =========================
+init_db()
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
