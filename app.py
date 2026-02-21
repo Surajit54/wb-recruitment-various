@@ -29,7 +29,7 @@ def get_db():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
 # =========================
-# AUTO INIT DB (NO MANUAL SQL)
+# AUTO INIT DB
 # =========================
 def init_db():
     conn = get_db()
@@ -52,7 +52,6 @@ def init_db():
     );
     """)
 
-    # default admin (admin / 1234) — created once
     cur.execute("SELECT * FROM admins WHERE username='admin'")
     if not cur.fetchone():
         cur.execute(
@@ -176,7 +175,7 @@ def health():
     return "OK"
 
 # =========================
-# STARTUP
+# START
 # =========================
 init_db()
 
