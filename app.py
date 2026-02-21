@@ -8,7 +8,7 @@ import os
 # APP CONFIG
 # =========================
 app = Flask(__name__)
-app.secret_key = "supersecretkey"
+app.secret_key = os.environ.get("SECRET_KEY", "fallback-secret")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
@@ -22,6 +22,8 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 def get_db_connection():
+    if not DATABASE_URL:
+        return None
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
 # =========================
@@ -35,93 +37,115 @@ def allowed_file(filename):
 # =========================
 @app.route("/")
 def index():
-    return render_template("index.html")
+    try:
+        return render_template("index.html")
+    except Exception as e:
+        return f"Template error: {e}"
 
+@app.route("/health")
+def health():
+    return "OK"
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
+    try:
+        if request.method == "POST":
+            username = request.form.get("username")
+            password = request.form.get("password")
 
-        if username == "admin" and password == "1234":
-            session["admin"] = True
-            return redirect(url_for("admin_dashboard"))
-        else:
-            return render_template("login.html", error="Invalid credentials")
+            if username == "admin" and password == "1234":
+                session["admin"] = True
+                return redirect(url_for("admin_dashboard"))
+            else:
+                return render_template("login.html", error="Invalid credentials")
 
-    return render_template("login.html")
-
+        return render_template("login.html")
+    except Exception as e:
+        return f"Login error: {e}"
 
 @app.route("/logout")
 def logout():
     session.pop("admin", None)
     return redirect(url_for("login"))
 
-
 @app.route("/admin/dashboard")
 def admin_dashboard():
     if "admin" not in session:
         return redirect(url_for("login"))
 
-    conn = get_db_connection()
-    cur = conn.cursor()
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return "DATABASE_URL not set"
 
-    cur.execute("SELECT COUNT(*) AS total FROM notices")
-    total = cur.fetchone()["total"]
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) AS total FROM notices")
+        total = cur.fetchone()["total"]
 
-    cur.close()
-    conn.close()
+        cur.close()
+        conn.close()
 
-    return render_template("admin_dashboard.html", total=total)
+        return render_template("admin_dashboard.html", total=total)
 
+    except Exception as e:
+        return f"Dashboard error: {e}"
 
 @app.route("/admin/upload", methods=["GET", "POST"])
 def upload_notice():
     if "admin" not in session:
         return redirect(url_for("login"))
 
-    if request.method == "POST":
-        title = request.form.get("title")
-        file = request.files.get("file")
+    try:
+        if request.method == "POST":
+            title = request.form.get("title")
+            file = request.files.get("file")
 
-        if not title or not file or file.filename == "":
-            return render_template("upload_notice.html", error="All fields required")
+            if not title or not file or file.filename == "":
+                return render_template("upload_notice.html", error="All fields required")
 
-        if allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(UPLOAD_FOLDER, filename))
+            if allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                file.save(os.path.join(UPLOAD_FOLDER, filename))
 
-            conn = get_db_connection()
-            cur = conn.cursor()
+                conn = get_db_connection()
+                if not conn:
+                    return "DATABASE_URL not set"
 
-            cur.execute(
-                "INSERT INTO notices (title, filename) VALUES (%s, %s)",
-                (title, filename)
-            )
-            conn.commit()
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO notices (title, filename) VALUES (%s, %s)",
+                    (title, filename)
+                )
+                conn.commit()
 
-            cur.close()
-            conn.close()
+                cur.close()
+                conn.close()
 
-            return redirect(url_for("notices"))
+                return redirect(url_for("notices"))
 
-    return render_template("upload_notice.html")
+        return render_template("upload_notice.html")
 
+    except Exception as e:
+        return f"Upload error: {e}"
 
 @app.route("/notices")
 def notices():
-    conn = get_db_connection()
-    cur = conn.cursor()
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return "DATABASE_URL not set"
 
-    cur.execute("SELECT * FROM notices ORDER BY upload_date DESC")
-    notices = cur.fetchall()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM notices ORDER BY upload_date DESC")
+        notices = cur.fetchall()
 
-    cur.close()
-    conn.close()
+        cur.close()
+        conn.close()
 
-    return render_template("notices.html", notices=notices)
+        return render_template("notices.html", notices=notices)
 
+    except Exception as e:
+        return f"Notices error: {e}"
 
 # =========================
 # RUN
