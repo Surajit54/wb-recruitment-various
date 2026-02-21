@@ -1,8 +1,17 @@
-{% extends "base.html" %}
-{% block content %}
-
-<section class="hero">
-    <h2>Welcome to WB Recruitment Portal</h2>
-</section>
-
-{% endblock %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Notices</title>
+</head>
+<body>
+<h2>All Notices</h2>
+<ul>
+{% for n in notices %}
+    <li>{{ n.title }} -
+        <a href="/static/uploads/{{ n.filename }}" target="_blank">Download</a>
+    </li>
+{% endfor %}
+</ul>
+<a href="/login">Admin Login</a>
+</body>
+</html>
